@@ -1,8 +1,11 @@
 {
+  "name": "my-app",
+  "version": "1.0.0",
+  "main": "mybot.js",
   "scripts": {
-  "start": "node index.js",
-  "dev": "nodemon index.js"
-},
+    "start": "node mybot.js",
+    "dev": "nodemon mybot.js"
+  },
   "dependencies": {
     "discord.js": "^14.22.1",
     "dotenv": "^17.2.2",
