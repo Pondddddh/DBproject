@@ -1,2 +1,2 @@
 #!/bin/bash
-node mybot.js
+node index.js
