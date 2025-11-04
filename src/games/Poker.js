@@ -1,9 +1,5 @@
 const { Deck } = require('../utils/deck');
 
-/**
- * Poker Game - Texas Hold'em (simplified for Discord)
- * Multiplayer: 2-8 players
- */
 class Poker {
   constructor(channelId, hostId) {
     this.channelId = channelId;

@@ -11,10 +11,8 @@ const client = new Client({
   ]
 });
 
-// Initialize commands collection
 client.commands = new Collection();
 
-// Load command files
 const commandsPath = path.join(__dirname, 'src', 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
@@ -27,7 +25,6 @@ for (const file of commandFiles) {
   }
 }
 
-// Load event handlers
 const eventsPath = path.join(__dirname, 'src', 'events');
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith('.js'));
 
@@ -42,7 +39,6 @@ for (const file of eventFiles) {
   console.log(`✅ Loaded event: ${event.name}`);
 }
 
-// Error handling
 process.on('unhandledRejection', error => {
   console.error('Unhandled promise rejection:', error);
 });

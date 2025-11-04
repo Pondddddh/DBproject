@@ -22,7 +22,7 @@ module.exports = {
           // Optionally auto-generate new puzzle
           const numbers = session.instance.newPuzzle();
           await message.channel.send(
-            `🎮 **New Puzzle!**\nNumbers: **${numbers.join(' • ')}**`
+            `**New Puzzle!**\nNumbers: **${numbers.join(' • ')}**`
           );
         } else {
           await message.reply(result.message);

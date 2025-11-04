@@ -1,9 +1,5 @@
 const { Deck } = require('../utils/deck');
 
-/**
- * Blackjack Game - Player vs Dealer
- * Goal: Get as close to 21 as possible without going over
- */
 class Blackjack {
   constructor(channelId, userId) {
     this.channelId = channelId;
@@ -14,6 +10,7 @@ class Blackjack {
     this.gameOver = false;
     this.result = null; // 'win', 'lose', 'tie', 'blackjack'
     this.bet = 0;
+    this.canDoubleDown = false;
   }
 
   /**

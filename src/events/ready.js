@@ -1,7 +1,7 @@
 const { REST, Routes } = require('discord.js');
 
 module.exports = {
-  name: 'ready',
+  name: 'clientReady',
   once: true,
   async execute(client) {
     console.log(`✅ Logged in as ${client.user.tag}`);
@@ -33,6 +33,6 @@ module.exports = {
       console.error('❌ Error registering commands:', error);
     }
 
-    console.log('🤖 Bot is ready!');
+    console.log('Bot is ready!');
   }
 };
