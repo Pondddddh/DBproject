@@ -1,7 +1,23 @@
-import { Card } from './card.js';
-import { randomInt } from './Helpers.js';
+const { randomInt } = require('./Helpers');
 
-export class Deck {
+class Card {
+  constructor(suit, rank) {
+    this.suit = suit;
+    this.rank = rank;
+  }
+
+  toString() {
+    return `${this.rank}${this.suit}`;
+  }
+
+  getValue() {
+    if (['J', 'Q', 'K'].includes(this.rank)) return 10;
+    if (this.rank === 'A') return 11;
+    return parseInt(this.rank);
+  }
+}
+
+class Deck {
   constructor() {
     this.cards = this.createDeck();
     this.shuffle();
@@ -9,8 +25,9 @@ export class Deck {
 
   createDeck() {
     const suits = ['♠', '♥', '♦', '♣'];
-    const ranks = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
     const deck = [];
+    
     for (const suit of suits) {
       for (const rank of ranks) {
         deck.push(new Card(suit, rank));
@@ -34,3 +51,5 @@ export class Deck {
     return this.cards.length;
   }
 }
+
+module.exports = { Card, Deck };
