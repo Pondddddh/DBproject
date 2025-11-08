@@ -45,5 +45,5 @@ process.on('unhandledRejection', error => {
 
 // Login
 client.login(process.env.DISCORD_TOKEN)
-  .then(() => console.log('🤖 Bot login successful!'))
+  .then(() => console.log('Bot login successful!'))
   .catch(err => console.error('❌ Login failed:', err));

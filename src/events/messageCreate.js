@@ -1,4 +1,5 @@
 const gameManager = require('../managers/GameManager');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
   name: 'messageCreate',
@@ -19,18 +20,43 @@ module.exports = {
 
         if (result.correct) {
           await message.reply(`${result.message}\n🎯 Attempts: ${result.attempts}`);
-          // Optionally auto-generate new puzzle
-          const numbers = session.instance.newPuzzle();
-          await message.channel.send(
-            `**New Puzzle!**\nNumbers: **${numbers.join(' • ')}**`
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('skip24')
+              .setLabel('🔄 New Puzzle')
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setCustomId('endgame')
+              .setLabel('❌ End Game')
+              .setStyle(ButtonStyle.Danger)
           );
+          const numbers = session.instance.newPuzzle();
+          await message.channel.send({
+            content : `**New Puzzle!**\nNumbers: **${numbers.join(' • ')}**`,
+            components: [row]
+          });
         } else {
           await message.reply(result.message);
         }
       }
+      else if (session.gameName === 'Poker') {
+        const result = session.instance.checkAnswer(message.content);
 
-      // Add handlers for other games here (Blackjack, Poker, etc.)
-      
+        if (!result.valid) {
+          await message.reply(`⚠️ ${result.message}`);
+          return;
+        }
+
+      }
+      else if (session.gameName === 'Blackjack') {
+        const result = session.instance.checkAnswer(message.content);
+
+        if (!result.valid) {
+          await message.reply(`⚠️ ${result.message}`);
+          return;
+        }
+
+      }
     } catch (error) {
       console.error('Message handling error:', error);
       await message.reply('❌ An error occurred processing your message.');
