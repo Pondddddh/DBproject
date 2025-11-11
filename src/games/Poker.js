@@ -4,7 +4,7 @@ class Poker {
   constructor(channelId, hostId) {
     this.channelId = channelId;
     this.hostId = hostId;
-    this.players = new Map(); // userId → { hand, chips, bet, folded, position }
+    this.players = new Map(); // userId → { username, hand, chips, bet, folded, position }
     this.deck = null;
     this.communityCards = [];
     this.pot = 0;
@@ -16,179 +16,199 @@ class Poker {
     this.bigBlind = 20;
   }
 
-  /**
-   * Add player to game
-   * TODO:
-   * - Check if game started
-   * - Check max players (8)
-   * - Add player with starting chips
-   */
+  /** Add player */
   addPlayer(userId, username, startingChips = 1000) {
-    
+    if (this.round !== 'waiting') return { success: false, message: 'Game already started.' };
+    if (this.players.size >= 8) return { success: false, message: 'Table full (8 max).' };
+    if (this.players.has(userId)) return { success: false, message: 'Player already joined.' };
 
-    // Add player to game
-    // return success/failure
+    const position = this.players.size;
+    this.players.set(userId, {
+      username,
+      hand: [],
+      chips: startingChips,
+      bet: 0,
+      folded: false,
+      position
+    });
+    return { success: true, message: `${username} joined the game.` };
   }
 
-  /**
-   * Remove player from game
-   */
+  /** Remove player */
   removePlayer(userId) {
-    // Remove player
+    if (!this.players.has(userId)) return false;
+    this.players.delete(userId);
+    return true;
   }
 
-  /**
-   * Start the game (lock players, begin rounds)
-   * TODO:
-   * - Require at least 2 players
-   * - Shuffle deck
-   * - Post blinds
-   * - Deal hole cards (2 per player)
-   */
+  /** Start game */
   startGame() {
-    // Validate player count
-    // Create and shuffle deck
-    // Post blinds
-    // Deal hole cards
-    // Set round to 'preflop'
+    if (this.players.size < 2) return { success: false, message: 'Need at least 2 players.' };
+
+    this.deck = new Deck();
+    this.deck.shuffle();
+
+    this.round = 'preflop';
+    this.communityCards = [];
+    this.pot = 0;
+    this.currentBet = 0;
+
+    this.postBlinds();
+    this.dealHoleCards();
+
+    this.currentPlayerIndex = (this.dealerPosition + 3) % this.players.size;
+    return { success: true, message: 'Game started.' };
   }
 
-  /**
-   * Deal hole cards (2 cards to each player)
-   * TODO: Deal 2 cards face down to each player
-   */
+  /** Post small and big blinds */
+  postBlinds() {
+    const playerArray = Array.from(this.players.entries());
+    const smallBlindPos = (this.dealerPosition + 1) % playerArray.length;
+    const bigBlindPos = (this.dealerPosition + 2) % playerArray.length;
+
+    const smallBlindPlayer = playerArray[smallBlindPos][1];
+    const bigBlindPlayer = playerArray[bigBlindPos][1];
+
+    smallBlindPlayer.bet = this.smallBlind;
+    bigBlindPlayer.bet = this.bigBlind;
+    smallBlindPlayer.chips -= this.smallBlind;
+    bigBlindPlayer.chips -= this.bigBlind;
+
+    this.currentBet = this.bigBlind;
+    this.pot += this.smallBlind + this.bigBlind;
+  }
+
+  /** Deal hole cards */
   dealHoleCards() {
-    // Deal 2 cards to each player
+    for (let i = 0; i < 2; i++) {
+      for (const [, player] of this.players) {
+        player.hand.push(this.deck.draw());
+      }
+    }
   }
 
-  /**
-   * Deal community cards based on round
-   * TODO:
-   * - Flop: 3 cards
-   * - Turn: 1 card
-   * - River: 1 card
-   */
+  /** Deal community cards */
   dealCommunityCards() {
-    // Deal based on current round
+    if (this.round === 'flop') {
+      this.deck.burn();
+      this.communityCards.push(this.deck.draw(), this.deck.draw(), this.deck.draw());
+    } else if (this.round === 'turn' || this.round === 'river') {
+      this.deck.burn();
+      this.communityCards.push(this.deck.draw());
+    }
   }
 
-  /**
-   * Player action: Call (match current bet)
-   * TODO:
-   * - Match current bet
-   * - Add to pot
-   * - Move to next player
-   */
+  /** Call */
   call(userId) {
-    // Player matches bet
-    // Update pot
+    const player = this.players.get(userId);
+    if (!player || player.folded) return false;
+
+    const callAmount = this.currentBet - player.bet;
+    if (callAmount > player.chips) return false; // can't afford
+
+    player.chips -= callAmount;
+    player.bet += callAmount;
+    this.pot += callAmount;
+    this.nextPlayer();
+    return true;
   }
 
-  /**
-   * Player action: Raise (increase bet)
-   * TODO:
-   * - Increase current bet
-   * - Update pot
-   * - Reset action to other players
-   */
+  /** Raise */
   raise(userId, amount) {
-    // Player raises bet
-    // Update currentBet
-    // Update pot
+    const player = this.players.get(userId);
+    if (!player || player.folded) return false;
+
+    const totalRaise = this.currentBet - player.bet + amount;
+    if (totalRaise > player.chips) return false;
+
+    player.chips -= totalRaise;
+    player.bet += totalRaise;
+    this.currentBet = player.bet;
+    this.pot += totalRaise;
+
+    this.nextPlayer();
+    return true;
   }
 
-  /**
-   * Player action: Fold (give up hand)
-   * TODO:
-   * - Mark player as folded
-   * - Check if only 1 player remains (auto win)
-   */
+  /** Fold */
   fold(userId) {
-    // Player folds
-    // Check for auto-win
+    const player = this.players.get(userId);
+    if (!player) return false;
+    player.folded = true;
+
+    // Auto-win check
+    const activePlayers = Array.from(this.players.values()).filter(p => !p.folded);
+    if (activePlayers.length === 1) {
+      const winner = activePlayers[0];
+      winner.chips += this.pot;
+      this.round = 'waiting';
+      return { autoWin: true, winner: winner.username };
+    }
+
+    this.nextPlayer();
+    return true;
   }
 
-  /**
-   * Player action: Check (pass action, no bet)
-   * TODO: Only allowed if currentBet === player's bet
-   */
+  /** Check */
   check(userId) {
-    // Player checks
+    const player = this.players.get(userId);
+    if (!player || player.folded) return false;
+    if (player.bet !== this.currentBet) return false;
+
+    this.nextPlayer();
+    return true;
   }
 
-  /**
-   * Move to next betting round
-   * TODO:
-   * - preflop → flop (deal 3 cards)
-   * - flop → turn (deal 1 card)
-   * - turn → river (deal 1 card)
-   * - river → showdown
-   */
+  /** Next round */
   nextRound() {
-    // Progress to next round
-    // Deal cards if needed
-    // Reset bets
+    if (this.round === 'preflop') this.round = 'flop';
+    else if (this.round === 'flop') this.round = 'turn';
+    else if (this.round === 'turn') this.round = 'river';
+    else if (this.round === 'river') {
+      this.round = 'showdown';
+      return this.showdown();
+    }
+
+    this.dealCommunityCards();
+    this.resetBets();
   }
 
-  /**
-   * Evaluate all hands and determine winner
-   * TODO:
-   * - Evaluate each non-folded player's hand
-   * - Determine best hand
-   * - Award pot to winner(s)
-   * - Handle split pots
-   */
+  /** Reset bets for next round */
+  resetBets() {
+    for (const [, player] of this.players) player.bet = 0;
+    this.currentBet = 0;
+  }
+
+  /** Showdown */
   showdown() {
-    // Evaluate all hands
-    // Determine winner
-    // Distribute pot
-    // return { winner, hand, amount }
+    const activePlayers = Array.from(this.players.values()).filter(p => !p.folded);
+
+    // Dummy evaluation: random winner (replace with evaluateHand)
+    const winner = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+    winner.chips += this.pot;
+
+    const result = { winner: winner.username, pot: this.pot };
+    this.round = 'waiting';
+    this.pot = 0;
+    return result;
   }
 
-  /**
-   * Evaluate poker hand (5 cards from 7 total)
-   * TODO:
-   * - Generate all 5-card combinations from player's 2 + community 5
-   * - Rank each hand
-   * - Return best hand with rank
-   * 
-   * Hand Rankings (lowest to highest):
-   * 0: High Card
-   * 1: One Pair
-   * 2: Two Pair
-   * 3: Three of a Kind
-   * 4: Straight
-   * 5: Flush
-   * 6: Full House
-   * 7: Four of a Kind
-   * 8: Straight Flush
-   * 9: Royal Flush
-   */
+  /** Placeholder evaluation logic */
   evaluateHand(playerCards, communityCards) {
-    // Combine player + community cards
-    // Find best 5-card hand
-    // return { rank, cards, name }
+    return { rank: 0, name: 'High Card', cards: [...playerCards, ...communityCards].slice(0, 5) };
   }
 
-  /**
-   * Check for specific hand types
-   */
-  isRoyalFlush(cards) { }
-  isStraightFlush(cards) { }
-  isFourOfAKind(cards) { }
-  isFullHouse(cards) { }
-  isFlush(cards) { }
-  isStraight(cards) { }
-  isThreeOfAKind(cards) { }
-  isTwoPair(cards) { }
-  isOnePair(cards) { }
-
-  /**
-   * Get current game state
-   */
+  /** Get current state */
   getState() {
     return {
-      players: Array.from(this.players.entries()),
+      players: Array.from(this.players.entries()).map(([id, p]) => ({
+        id,
+        username: p.username,
+        chips: p.chips,
+        bet: p.bet,
+        folded: p.folded,
+        hand: p.hand
+      })),
       communityCards: this.communityCards,
       pot: this.pot,
       currentBet: this.currentBet,
@@ -197,42 +217,42 @@ class Poker {
     };
   }
 
-  /**
-   * Get current player whose turn it is
-   */
+  /** Current player */
   getCurrentPlayer() {
-    // Return current player
+    const playerArray = Array.from(this.players.entries());
+    return playerArray[this.currentPlayerIndex] ? playerArray[this.currentPlayerIndex][1] : null;
   }
 
-  /**
-   * Move to next player
-   */
+  /** Move to next player */
   nextPlayer() {
-    // Skip folded players
-    // Wrap around if needed
+    const playerArray = Array.from(this.players.entries());
+    do {
+      this.currentPlayerIndex = (this.currentPlayerIndex + 1) % playerArray.length;
+    } while (playerArray[this.currentPlayerIndex][1].folded);
   }
 
-  /**
-   * Format cards for display
-   */
+  /** Format cards for display */
   formatCards(cards, hidden = false) {
-    // Format cards with emojis
-    // Hide if needed (opponent hands)
+    if (hidden) return ['🂠', '🂠'];
+    return cards.map(c => `${c.rank}${c.suit}`);
   }
 
-  /**
-   * Reset for new game
-   */
+  /** Reset for new game */
   reset() {
     this.communityCards = [];
     this.pot = 0;
     this.currentBet = 0;
     this.round = 'waiting';
-    // Reset player hands but keep chips
+    for (const [, player] of this.players) {
+      player.hand = [];
+      player.bet = 0;
+      player.folded = false;
+    }
   }
 }
 
 module.exports = Poker;
+
 
 /**
  * IMPLEMENTATION NOTES FOR YOUR MATE:
