@@ -1,4 +1,4 @@
-const { randomInt } = require('./Helpers');
+const { randomInt } = require('./Helper');
 
 class Card {
   constructor(suit, rank) {
