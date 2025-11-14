@@ -16,86 +16,65 @@ class Blackjack {
     this.canDoubleDown = false;
   }
 
-  /**
-   * Start a new game
-   */
-  startGame(betAmount = 10) {
-    this.bet = betAmount;
+  startGame(betAmount = 0) {
+    this.reset();
     this.deck = new Deck();
-    this.playerHand = [];
-    this.dealerHand = [];
-    this.gameOver = false;
-    this.result = null;
+    this.deck.shuffle();
+    this.bet = betAmount;
+
+    this.playerHand.push(this.deck.draw());
+    this.dealerHand.push(this.deck.draw());
+    this.playerHand.push(this.deck.draw());
+    this.dealerHand.push(this.deck.draw());
+
     this.canDoubleDown = true;
 
-    // Deal initial cards
-    this.playerHand.push(this.deck.deal());
-    this.dealerHand.push(this.deck.deal());
-    this.playerHand.push(this.deck.deal());
-    this.dealerHand.push(this.deck.deal());
+    const playerValue = this.calculateHandValue(this.playerHand);
+    const dealerValue = this.calculateHandValue(this.dealerHand);
 
-    // Check for immediate blackjack
-    if (this.isBlackjack(this.playerHand)) {
-      if (this.isBlackjack(this.dealerHand)) {
-        this.gameOver = true;
-        this.result = 'tie';
-      } else {
-        this.gameOver = true;
-        this.result = 'blackjack';
-      }
+    if (this.isBlackjack(this.playerHand) && this.isBlackjack(this.dealerHand)) {
+      this.gameOver = true;
+      this.result = 'tie';
+    } else if (this.isBlackjack(this.playerHand)) {
+      this.gameOver = true;
+      this.result = 'blackjack';
+    } else if (this.isBlackjack(this.dealerHand)) {
+      this.gameOver = true;
+      this.result = 'lose';
     }
 
     return this.getState();
   }
 
-  /**
-   * Player hits (takes another card)
-   */
   hit() {
-    if (this.gameOver) {
-      return { success: false, message: 'Game is over' };
-    }
+    if (this.gameOver) return this.getState();
 
     this.canDoubleDown = false;
-    const card = this.deck.deal();
+    const card = this.deck.draw();
     this.playerHand.push(card);
 
-    const playerValue = this.calculateHandValue(this.playerHand);
+    const value = this.calculateHandValue(this.playerHand);
 
-    if (playerValue > 21) {
+    if (value > 21) {
       this.gameOver = true;
-      this.result = 'bust';
-      return {
-        success: true,
-        card,
-        handValue: playerValue,
-        busted: true,
-        gameOver: true
-      };
+      this.result = 'lose';
     }
 
     return {
-      success: true,
       card,
-      handValue: playerValue,
-      busted: false,
-      gameOver: false
+      handValue: value,
+      busted: this.isBusted(this.playerHand),
+      ...this.getState()
     };
   }
 
-  /**
-   * Player stands (ends turn)
-   */
   stand() {
-    if (this.gameOver) {
-      return { success: false, message: 'Game is over' };
-    }
+    if (this.gameOver) return this.getState();
 
     this.canDoubleDown = false;
 
-    // Dealer plays - must hit until 17 or higher
     while (this.calculateHandValue(this.dealerHand) < 17) {
-      this.dealerHand.push(this.deck.deal());
+      this.dealerHand.push(this.deck.draw());
     }
 
     const playerValue = this.calculateHandValue(this.playerHand);
@@ -103,9 +82,8 @@ class Blackjack {
 
     this.gameOver = true;
 
-    // Determine winner
     if (dealerValue > 21) {
-      this.result = 'win'; // Dealer busts
+      this.result = 'win';
     } else if (playerValue > dealerValue) {
       this.result = 'win';
     } else if (playerValue < dealerValue) {
@@ -115,93 +93,68 @@ class Blackjack {
     }
 
     return {
-      success: true,
       dealerHand: this.dealerHand,
       dealerValue,
-      playerValue,
       result: this.result,
-      gameOver: true
+      ...this.getState()
     };
   }
 
-  /**
-   * Double down (double bet, take 1 card, auto stand)
-   */
   doubleDown() {
-    if (this.gameOver) {
-      return { success: false, message: 'Game is over' };
-    }
-
-    if (!this.canDoubleDown) {
-      return { success: false, message: 'Can only double down on first turn' };
-    }
+    if (!this.canDoubleDown || this.gameOver) return this.getState();
 
     this.bet *= 2;
-    const card = this.deck.deal();
+    const card = this.deck.draw();
     this.playerHand.push(card);
+    const value = this.calculateHandValue(this.playerHand);
 
-    const playerValue = this.calculateHandValue(this.playerHand);
-
-    if (playerValue > 21) {
+    if (value > 21) {
       this.gameOver = true;
-      this.result = 'bust';
-      return {
-        success: true,
-        card,
-        handValue: playerValue,
-        busted: true,
-        gameOver: true,
-        bet: this.bet
-      };
+      this.result = 'lose';
+    } else {
+      return this.stand();
     }
 
-    // Auto stand after double down
-    return this.stand();
+    return {
+      card,
+      value,
+      result: this.result,
+      ...this.getState()
+    };
   }
 
-  /**
-   * Calculate hand value with Ace handling
-   */
   calculateHandValue(hand) {
-    let value = 0;
+    let total = 0;
     let aces = 0;
 
     for (const card of hand) {
-      const cardValue = card.getValue();
-      if (card.rank === 'A') {
-        aces++;
-        value += 11;
+      const rank = card.rank;
+      if (['J', 'Q', 'K'].includes(rank)) {
+        total += 10;
+      } else if (rank === 'A') {
+        aces += 1;
+        total += 11;
       } else {
-        value += cardValue;
+        total += parseInt(rank);
       }
     }
 
-    // Adjust Aces from 11 to 1 if needed
-    while (value > 21 && aces > 0) {
-      value -= 10;
-      aces--;
+    while (total > 21 && aces > 0) {
+      total -= 10;
+      aces -= 1;
     }
 
-    return value;
+    return total;
   }
 
-  /**
-   * Check if hand is blackjack (21 with 2 cards)
-   */
   isBlackjack(hand) {
     return hand.length === 2 && this.calculateHandValue(hand) === 21;
   }
 
-  /**
-   * Check if hand is busted (> 21)
-   */
   isBusted(hand) {
     return this.calculateHandValue(hand) > 21;
   }
 
-  /**
-   * Get current game state
-   */
   getState() {
     return {
       playerHand: this.playerHand,
@@ -215,36 +168,28 @@ class Blackjack {
     };
   }
 
-  /**
-   * Format hand for display
-   */
   formatHand(hand, hideFirst = false) {
-    if (hideFirst && hand.length > 0) {
-      const visible = hand.slice(1).map(c => `**${c.rank}${c.suit}**`).join(' ');
-      return `🎴 ${visible}`;
-    }
-    return hand.map(c => `**${c.rank}${c.suit}**`).join(' ');
+    return hand
+      .map((card, i) => {
+        if (hideFirst && i === 0) return '🂠';
+        const suitSymbol = {
+          '♠': '♠',
+          '♥': '♥',
+          '♦': '♦',
+          '♣': '♣'
+        }[card.suit] || card.suit;
+        return `${card.rank}${suitSymbol}`;
+      })
+      .join(' ');
   }
 
-  /**
-   * Get payout based on result
-   */
-  getPayout() {
-    if (this.result === 'blackjack') return this.bet * 2.5; // 1.5x win
-    if (this.result === 'win') return this.bet * 2;
-    if (this.result === 'tie') return this.bet;
-    return 0; // lose or bust
-  }
-
-  /**
-   * Reset for new game
-   */
   reset() {
     this.deck = null;
     this.playerHand = [];
     this.dealerHand = [];
     this.gameOver = false;
     this.result = null;
+    this.bet = 0;
     this.canDoubleDown = false;
   }
 }
