@@ -1,82 +1,70 @@
+const db = require('./database');
+
 class UserMapper {
   constructor() {
-    this.cache = new Map(); // discordId -> dbUserId
-    this.reverseCache = new Map(); // dbUserId -> discordId
+    this.cache = new Map();
+    this.reverseCache = new Map();
   }
 
-
   async getOrCreateUser(discordId, username) {
-    // Check cache first
-    if (this.cache.has(discordId)) {
-      const dbUserId = this.cache.get(discordId);
-      const user = await db.getUser(dbUserId);
-      return {
-        discordId,
-        dbUserId,
-        user,
-        authenticated: true
-      };
+  if (this.cache.has(discordId)) {
+    const dbUserId = this.cache.get(discordId);
+    const user = await db.getUser(dbUserId);
+    if (user) {
+      return { discordId, dbUserId, user };
+    }
+  }
+
+  const email = `${discordId}@discord.user`;
+  
+  // Try to find user by username first (fallback)
+  let user = await db.getUserByUsername(username);
+  
+  if (!user) {
+    // Check by email
+    const allUsers = await sql`SELECT * FROM users WHERE email = ${email}`;
+    user = allUsers[0];
+  }
+
+  if (!user) {
+    // Create new user
+    user = await db.createUser(username, 'discord_auth', email, 'player', 1000);
+  }
+
+  this.cache.set(discordId, user.user_id);
+  this.reverseCache.set(user.user_id, discordId);
+
+  return { discordId, dbUserId: user.user_id, user };
+}
+
+  async getDiscordId(dbUserId) {
+    if (this.reverseCache.has(dbUserId)) {
+      return this.reverseCache.get(dbUserId);
     }
 
-    // Check if user exists by email (using discord ID as email)
-    const email = `${discordId}@discord.user`;
-    let user = await db.getUserByEmail(email);
+    const user = await db.getUser(dbUserId);
+    if (!user) return null;
 
-    if (!user) {
-      user = await db.createUser(
-        username,
-        'discord_auth',
-        email,
-        'player',
-        1000 
-      );
-    }
+    const discordId = user.email.replace('@discord.user', '');
 
-    // Cache the mapping
-    this.cache.set(discordId, user.user_id);
-    this.reverseCache.set(user.user_id, discordId);
+    this.cache.set(discordId, dbUserId);
+    this.reverseCache.set(dbUserId, discordId);
 
-    return {
-      discordId,
-      dbUserId: user.user_id,
-      user,
-      authenticated: true
-    };
+    return discordId;
   }
 
   async authenticate(discordId, username) {
     return await this.getOrCreateUser(discordId, username);
   }
 
-
-  isAuthenticated(discordId) {
-    return discordId !== null && discordId !== undefined;
+  async updateUsername(discordId, newUsername) {
+    const dbUserId = await this.getDbUserId(discordId, newUsername);
+    await db.updateUser(dbUserId, { username: newUsername });
   }
 
-
-  async checkPermission(discordId, requiredRole) {
-    const userData = await this.getOrCreateUser(discordId, 'unknown');
-    
-    const roleHierarchy = {
-      'player': 0,
-      'vip': 1,
-      'admin': 2
-    };
-
-    const userLevel = roleHierarchy[userData.user.role] || 0;
-    const requiredLevel = roleHierarchy[requiredRole] || 0;
-
-    return userLevel >= requiredLevel;
-  }
-
-
-  async isBanned(discordId) {
-    try {
-      const userData = await this.getOrCreateUser(discordId, 'unknown');
-      return userData.user.role === 'banned';
-    } catch (error) {
-      return false;
-    }
+  clearCache() {
+    this.cache.clear();
+    this.reverseCache.clear();
   }
 }
 
